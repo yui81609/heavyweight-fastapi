@@ -27,3 +27,5 @@ def get_last_conversation(project_id: str):
 def save_conversation(project_id: str, conv: Conversation):
     storage[project_id] = conv.dict()
     return {"ok": True, "conversation_id": 1}
+def health():
+    return {"ok": True, "app": "chat-context"}
