@@ -11,7 +11,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 # -------------------- FastAPI & CORS --------------------
-app = FastAPI()
+app = FastAPI(
+    title="Heavyweight FastAPI",
+    version="1.0.0",
+    servers=[{"url": "https://heavyweight-fastapi-production-b71c.up.railway.app"}]
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
