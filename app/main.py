@@ -19,9 +19,11 @@ class Conversation(BaseModel):
     topic_tags: Optional[List[str]] = []
     tail_messages: Optional[List[Message]] = []
 
-@app.get("/projects/{project_id}/last-conversation")
+@app.get("/")
 def health():
     return {"ok": True, "app": "chat-context"}
+
+@app.get("/projects/{project_id}/last-conversation")
 def get_last_conversation(project_id: str):
     return storage.get(project_id, {"summary": None, "tone_tags": [], "topic_tags": [], "tail_messages": []})
 
@@ -29,3 +31,4 @@ def get_last_conversation(project_id: str):
 def save_conversation(project_id: str, conv: Conversation):
     storage[project_id] = conv.dict()
     return {"ok": True, "conversation_id": 1}
+
