@@ -41,12 +41,23 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not set")
 
+# ⚠️ 強制指定 psycopg 驅動
+if not DATABASE_URL.startswith("postgresql+psycopg://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://")
+
+
 # Railway 內網通常不需要 SSL；若你未來用外網 URL，可保留這段自動補 sslmode
 if "sslmode" not in DATABASE_URL:
     sep = "&" if "?" in DATABASE_URL else "?"
     DATABASE_URL = f"{DATABASE_URL}{sep}sslmode=require"
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    connect_args={"options": "-c timezone=UTC"},
+    future=True
+)
+
 metadata = MetaData()
 
 conversations = Table(
