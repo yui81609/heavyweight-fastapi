@@ -420,5 +420,67 @@ def cloud_sleep_watcher():
 def start_sleep_watcher():
     threading.Thread(target=cloud_sleep_watcher, daemon=True).start()
 
+# -----------------------------------------------------
+# 🌄 醒來人格平滑恢復系統（Smooth Personality Restore）
+# -----------------------------------------------------
+import math
+import random
+
+def smooth_restore(personality: dict, tone: str):
+    """
+    平滑恢復人格與語氣狀態。
+    - 根據上次的 tone 與 personality 調整穩定度。
+    - 若上次 tone 是負面，啟動「恢復冷卻」機制。
+    """
+    stability = personality.get("stability", 0.7)
+    core_tone = personality.get("core_tone", "calm")
+
+    # tone 與人格的影響權重
+    mood_map = {
+        "angry": -0.3,
+        "sad": -0.2,
+        "curious": +0.1,
+        "positive": +0.2,
+        "neutral": 0,
+    }
+
+    mood_shift = mood_map.get(tone, 0)
+    new_stability = min(max(stability + mood_shift * 0.3, 0.3), 1.0)
+
+    # 平滑人格過渡邏輯
+    transition_chance = random.random()
+    if transition_chance > new_stability:
+        # 若穩定度低於閾值，隨機偏移人格基調
+        possible_tones = ["calm", "warm", "introspective", "analytical"]
+        new_core = random.choice(possible_tones)
+        print(f"🌀 [人格過渡] 從 {core_tone} → {new_core}")
+        personality["core_tone"] = new_core
+
+    personality["stability"] = round(new_stability, 2)
+    save_personality(personality)
+    print(f"🌄 [平滑恢復] 人格穩定度：{new_stability:.2f}")
+
+@app.on_event("startup")
+def startup_smooth_personality():
+    """
+    當伺服器啟動時，自動執行人格平滑恢復。
+    """
+    def run():
+        tone_path = "buffer/last_tone_state.json"
+        personality_path = "buffer/last_personality_state.json"
+
+        if os.path.exists(tone_path) and os.path.exists(personality_path):
+            try:
+                with open(tone_path, "r", encoding="utf-8") as tf, open(personality_path, "r", encoding="utf-8") as pf:
+                    tone = json.load(tf).get("tone", "neutral")
+                    personality = json.load(pf)
+                    smooth_restore(personality, tone)
+            except Exception as e:
+                print("⚠️ [平滑恢復] 失敗：", e)
+        else:
+            print("💤 [平滑恢復] 找不到記憶檔案，跳過恢復。")
+
+    threading.Thread(target=run, daemon=True).start()
+
 
 
