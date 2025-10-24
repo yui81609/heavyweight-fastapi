@@ -2,6 +2,7 @@
 import json
 import os
 from collections import deque, Counter
+from functools import lru_cache
 
 STATE_FILE = "buffer/personality_state.json"
 
@@ -14,40 +15,61 @@ default_personality = {
     "stability": 0.7,  # 越高代表越難被短期情緒改變
 }
 
+
+@lru_cache(maxsize=5)
 def load_personality():
-    """讀取目前人格狀態"""
+    """快取當前人格狀態，避免重複讀檔"""
     if not os.path.exists(STATE_FILE):
         return default_personality
     with open(STATE_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return default_personality
 
-def save_personality(state):
-    """儲存人格狀態"""
+
+def save_personality(state: dict):
+    """儲存人格狀態並清除快取"""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
-    print(f"💾 已更新人格基調：{state['core_tone']}（穩定度：{state['stability']}）")
+    load_personality.cache_clear()
+    print(f"💾 已更新人格基調：{state['core_tone']}（穩定度：{state['stability']:.2f}）")
 
-def update_personality(tone: str):
-    """
-    根據最新語氣更新人格傾向。
-    """
-    tone_history.append(tone)
-    counts = Counter(tone_history)
-    most_common = counts.most_common(1)[0][0]
 
+def update_personality(tone: str) -> dict:
+    """
+    根據語氣 tone 微調人格狀態
+    - 若語氣連續偏一種方向，會影響 core_tone
+    - 但穩定度會緩衝這個變化（防止人格劇烈波動）
+    """
     state = load_personality()
+    tone_history.append(tone)
 
-    # 若短期情緒與基調不同，微調穩定性
-    if most_common != state["core_tone"]:
-        state["stability"] -= 0.05
-        if state["stability"] < 0.4:
-            state["core_tone"] = most_common
-            state["stability"] = 0.7
-            print(f"🌙 人格基調轉移 → {state['core_tone']}")
+    # 統計最近的 tone 分佈
+    tone_count = Counter(tone_history)
+    dominant_tone = tone_count.most_common(1)[0][0] if tone_count else "calm"
+
+    # 人格傾向轉換邏輯
+    new_tone = state["core_tone"]
+    if dominant_tone in ["sad", "gentle", "warm"] and state["stability"] < 0.9:
+        new_tone = "warm"
+    elif dominant_tone in ["reflective", "rational", "neutral"]:
+        new_tone = "calm"
+    elif dominant_tone in ["angry", "stressed"]:
+        new_tone = "grounded"
+
+    # 穩定度微幅增減
+    if dominant_tone == state["core_tone"]:
+        state["stability"] = min(1.0, state["stability"] + 0.02)
     else:
-        # 維持一致時逐漸回穩
-        state["stability"] = min(state["stability"] + 0.02, 0.9)
+        state["stability"] = max(0.5, state["stability"] - 0.05)
+
+    # 若人格有變化才更新
+    if new_tone != state["core_tone"]:
+        print(f"🧭 人格轉換：{state['core_tone']} → {new_tone}")
+        state["core_tone"] = new_tone
 
     save_personality(state)
     return state
+
