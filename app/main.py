@@ -364,5 +364,61 @@ def start_smart_keep_alive():
     """
     threading.Thread(target=smart_keep_alive, daemon=True).start()
 
+# -----------------------------------------------------
+# 🌙 雲端睡眠偵測（Sleep Watcher）
+# -----------------------------------------------------
+import psutil
+import json
+from utils.tone_memory import load_tone_state
+from utils.personality import load_personality, save_personality
+
+def cloud_sleep_watcher():
+    """
+    定期監測伺服器活性，當系統長時間低載時，
+    自動保存 tone / personality 狀態，確保醒來仍保持記憶。
+    """
+    print("🌙 Sleep Watcher 已啟動（雲端記憶保護中）")
+    low_activity_time = 0  # 計算閒置秒數
+    tone_backup_file = "buffer/last_tone_state.json"
+    personality_backup_file = "buffer/last_personality_state.json"
+
+    while True:
+        try:
+            cpu_usage = psutil.cpu_percent(interval=1)
+            mem_usage = psutil.virtual_memory().percent
+            idle_seconds = (datetime.utcnow() - last_activity).total_seconds()
+
+            # 當 CPU 長時間低於 5%，且超過 20 分鐘沒互動
+            if cpu_usage < 5 and idle_seconds > 1200:
+                low_activity_time += 60
+            else:
+                low_activity_time = 0  # 重置計時
+
+            if low_activity_time >= 300:  # 閒置滿 5 分鐘（進入睡眠前保存）
+                tone_state = load_tone_state()
+                personality = load_personality()
+
+                # 儲存 tone 狀態
+                with open(tone_backup_file, "w", encoding="utf-8") as f:
+                    json.dump({"tone": tone_state}, f, ensure_ascii=False, indent=2)
+
+                # 儲存 personality 狀態
+                save_personality(personality)
+                with open(personality_backup_file, "w", encoding="utf-8") as f:
+                    json.dump(personality, f, ensure_ascii=False, indent=2)
+
+                print(f"💾 [SleepWatcher] 已自動保存記憶與人格狀態。")
+                low_activity_time = 0  # 重置狀態
+
+        except Exception as e:
+            print("⚠️ [SleepWatcher] 發生錯誤：", e)
+
+        time.sleep(60)  # 每分鐘檢查一次
+
+
+@app.on_event("startup")
+def start_sleep_watcher():
+    threading.Thread(target=cloud_sleep_watcher, daemon=True).start()
+
 
 
