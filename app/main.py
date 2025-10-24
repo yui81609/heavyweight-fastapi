@@ -310,6 +310,28 @@ def restore_latest_backup():
 def startup_restore_backup():
     threading.Thread(target=restore_latest_backup, daemon=True).start()
 
+@app.post("/auto-play")
+async def auto_play(conversation: List[str]):
+    """
+    在長時間聊天後，將整段對話一次送進 tone / personality 系統更新。
+    """
+    from utils.personality import update_personality
+    from utils.tone_engine_async import detect_tone
+
+    # 🔍 偵測整體情緒趨勢
+    joined = " ".join(conversation[-10:])  # 取最後 10 句
+    tone = detect_tone(joined)
+
+    # 💾 更新人格狀態（非同步）
+    new_personality = await update_personality(tone)
+
+    return {
+        "ok": True,
+        "tone_detected": tone,
+        "new_personality": new_personality,
+        "message": f"🌙 已根據今日聊天更新人格狀態（主情緒：{tone}）"
+    }
+
 
 
 
