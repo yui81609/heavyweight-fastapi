@@ -28,3 +28,13 @@ def soft_response(text: str, tone: str = "default"):
     """
     tone_delay(tone)
     return f"{text}"
+
+from utils.tone_detector import detect_tone
+
+def auto_soft_response(text: str):
+    """
+    自動判斷語氣 + 模擬延遲回應
+    """
+    tone = detect_tone(text)
+    tone_delay(tone)
+    return f"{text}（語氣：{tone}）"
