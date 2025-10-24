@@ -298,3 +298,29 @@ def ping():
     return {"status": "alive", "message": "🩵 still running..."}
 
 
+import threading
+import time
+import requests
+
+def keep_alive():
+    """
+    每 1 分鐘自動 ping 自己一次，防止 Railway 進入睡眠。
+    """
+    url = "https://heavyweight-fastapi-production-b71c.up.railway.app/ping"
+    while True:
+        try:
+            r = requests.get(url)
+            if r.status_code == 200:
+                print("💤 [保活] 成功 Ping 自己！")
+            else:
+                print(f"⚠️ [保活] Ping 回傳非 200：{r.status_code}")
+        except Exception as e:
+            print("⚠️ [保活] 連線失敗：", e)
+        time.sleep(60)  # 每 60 秒（1 分鐘）ping 一次
+
+@app.on_event("startup")
+def start_keep_alive():
+    threading.Thread(target=keep_alive, daemon=True).start()
+
+
+
