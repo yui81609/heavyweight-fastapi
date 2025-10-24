@@ -1,82 +1,86 @@
+# utils/tone_handler.py
+import asyncio
 import random
-import time
 from utils.tone_detector import detect_tone
 from utils.tone_memory import save_tone_state, load_tone_state, transition_tone
 from utils.personality import update_personality
-from utils.tone_resonance import generate_resonant_reply
+from utils.tone_engine_async import ToneEngine
 
-# --------------------------------
-# 🕊️ Tone 延遲設定
-# --------------------------------
+# 初始化 Tone 引擎
+tone_engine = ToneEngine()
+
+# -----------------------------------------------------------
+# ⏳ Tone 回應延遲模擬
+# -----------------------------------------------------------
 TONE_DELAY_MAP = {
-    "calm": (0.8, 1.5),
-    "relaxed": (0.5, 1.2),
-    "reflective": (1.0, 2.2),
-    "deep": (1.5, 2.8),
-    "sad": (1.8, 3.5),
-    "light": (0.3, 0.9),
-    "default": (0.6, 1.4)
+    "angry": (0.3, 1.0),
+    "sad": (0.8, 1.5),
+    "curious": (0.4, 0.9),
+    "positive": (0.2, 0.6),
+    "neutral": (0.5, 1.0),
+    "default": (0.5, 1.0),
 }
 
-def tone_delay(tone: str = "default"):
-    """
-    根據語氣決定回應延遲，模擬「呼吸感」
-    """
+def tone_delay(tone: str):
+    """根據語氣模擬不同延遲"""
+    import time
     delay_range = TONE_DELAY_MAP.get(tone, TONE_DELAY_MAP["default"])
     delay = random.uniform(*delay_range)
-    print(f"🌿 [安靜模式] 語氣: {tone} → 延遲 {delay:.2f} 秒")
+    print(f"⌛ [{tone}] 延遲 {delay:.2f}s")
     time.sleep(delay)
 
 
-# --------------------------------
-# 💬 基礎層：柔和延遲回覆
-# --------------------------------
-def soft_response(text: str, tone: str = "default") -> str:
+# -----------------------------------------------------------
+# 💬 智慧語氣回應主流程
+# -----------------------------------------------------------
+async def auto_soft_response(text: str) -> str:
     """
-    🕊️ 模擬柔和回應：根據 tone 延遲後回傳文字
-    用於靜態回覆或固定語氣（不含情緒偵測邏輯）
+    核心流程：
+    1️⃣ 偵測語氣
+    2️⃣ 與上次語氣比對 → 若重複則平滑轉換
+    3️⃣ 更新人格狀態（穩定度影響人格 tone）
+    4️⃣ 呼叫 ToneEngine 產生語氣回覆
+    5️⃣ 模擬回覆延遲
     """
-    tone_delay(tone)
-    return text
-
-
-# --------------------------------
-# 🌙 高階層：自動語氣回應主流程
-# --------------------------------
-def auto_soft_response(text: str):
-    """
-    🌙 自動語氣回應核心函式：
-    - 偵測語氣（tone）
-    - 比對上次情緒，啟動漸變機制
-    - 更新人格基調
-    - 套用人格語氣共振回覆
-    - 模擬自然延遲
-    """
-    # 1️⃣ 偵測語氣 + 載入上次 tone
+    # --- 1️⃣ 偵測目前 tone
     tone = detect_tone(text)
-    previous_tone = load_tone_state()
+    prev_tone = load_tone_state()
 
-    # 2️⃣ 若語氣與上輪相同 → 啟動情緒漸變
-    if tone == previous_tone:
+    # --- 2️⃣ 平滑轉換或記錄
+    if tone == prev_tone:
         tone = transition_tone(tone)
     else:
         save_tone_state(tone)
 
-    # 3️⃣ 更新人格平衡狀態
-    personality_state = update_personality(tone)
-    core_tone = personality_state["core_tone"]
+    # --- 3️⃣ 更新人格（非同步，不阻塞主流程）
+    new_personality = await update_personality(tone)
 
-    # 4️⃣ 模擬自然延遲（根據人格基調）
-    tone_delay(core_tone)
+    # --- 4️⃣ 產生 ToneEngine 回覆（結合人格狀態）
+    prompt = f"[人格基調: {new_personality['core_tone']} / 穩定度: {new_personality['stability']:.2f}] 使用者說：{text}"
+    reply_data = await tone_engine.reply(prompt)
+    reply = reply_data["reply"]
 
-    # 5️⃣ 語氣共振生成回覆
-    reply = generate_resonant_reply(text, tone, core_tone)
+    # --- 5️⃣ 模擬延遲
+    tone_delay(tone)
 
-    # 6️⃣ 回傳完整資訊（便於記錄與測試）
-    return {
-        "reply": reply,
-        "tone": tone,
-        "core_tone": core_tone,
-        "previous_tone": previous_tone
-    }
+    print(f"🪶 回覆 tone={tone}, 人格={new_personality['core_tone']}")
+    return reply
+
+
+# -----------------------------------------------------------
+# ✨ 測試用入口（可在本地執行測試）
+# -----------------------------------------------------------
+if __name__ == "__main__":
+    async def test():
+        test_inputs = [
+            "謝謝你今天陪我聊天",
+            "我覺得有點難過",
+            "你覺得我該怎麼辦？",
+            "真的太煩了，我快受不了了",
+        ]
+        for msg in test_inputs:
+            response = await auto_soft_response(msg)
+            print(f"\n👤 User: {msg}\n🤖 Bot: {response}\n")
+
+    asyncio.run(test())
 
