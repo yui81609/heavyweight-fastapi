@@ -1,25 +1,33 @@
 # utils/tone_memory.py
-import json
-import os
+from functools import lru_cache
+import os, json
 
 STATE_FILE = "buffer/tone_state.json"
+
 
 def save_tone_state(tone: str):
     """儲存當前語氣狀態"""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"last_tone": tone}, f, ensure_ascii=False, indent=2)
+        json.dump({"tone": tone}, f, ensure_ascii=False, indent=2)
     print(f"💾 已儲存語氣狀態：{tone}")
+    # ✅ 修正：縮排必須正確（這行在函式內）
+    load_tone_state.cache_clear()
 
-def load_tone_state() -> str:
-    """讀取上次語氣狀態"""
-    if not os.path.exists(STATE_FILE):
+
+@lru_cache(maxsize=10)
+def load_tone_state():
+    """
+    快取最近的 tone 狀態，避免重複讀檔。
+    自動保存最近 10 次呼叫結果。
+    """
+    path = STATE_FILE
+    if not os.path.exists(path):
         return "default"
-    with open(STATE_FILE, "r", encoding="utf-8") as f:
+
+    with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-        tone = data.get("last_tone", "default")
-        print(f"🪶 上次語氣狀態：{tone}")
-        return tone
+        return data.get("tone", "default")
 
 # -------------------------------------
 # 語氣轉移邏輯（漸變系統）
