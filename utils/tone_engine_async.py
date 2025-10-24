@@ -56,9 +56,19 @@ class ToneEngine:
             save_tone_state(tone)
         self.current_tone = tone
 
-        # 更新人格
-        self.personality_state = update_personality(tone)
+        # 3️⃣ 人格微調（共長但不漂移）
+        new_state = update_personality(tone)
+        previous_core = self.personality_state.get("core_tone", "calm")
+
+        # 🔸 若新tone與前次tone差距不大，平滑融合（共長）
+        if new_state["core_tone"] == previous_core:
+            self.personality_state["core_tone"] = previous_core
+        else:
+            # 以當前 tone 為主，權重 80% 你 → 20% 他
+            self.personality_state["core_tone"] = tone if random.random() < 0.8 else previous_core
+
         self.core_tone = self.personality_state["core_tone"]
+
 
         # 模擬延遲（async）
         await tone_delay_async(self.core_tone)
