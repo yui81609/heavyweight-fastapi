@@ -49,3 +49,19 @@ def safe_upload(payload, url):
     except Exception as e:
         print("❌ 上傳失敗，原因：", e)
         save_to_buffer({"url": url, "payload": payload})
+import threading
+
+def schedule_retry_upload(interval: int = 600):
+    """
+    每隔 interval 秒自動執行一次 retry_upload。
+    預設 600 秒（10 分鐘）。
+    """
+    def loop():
+        while True:
+            print("🕒 定時檢查暫存上傳中...")
+            retry_upload()
+            time.sleep(interval)
+
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    print(f"⏳ 已啟動背景上傳檢查，每 {interval/60} 分鐘執行一次。")
