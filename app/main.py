@@ -3,6 +3,8 @@ import os, json, asyncio
 from typing import List, Optional
 from collections import Counter
 from datetime import datetime
+from utils.memory.memory_manager import init_memory
+
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
