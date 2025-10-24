@@ -94,3 +94,25 @@ class ToneEngine:
     # 同步快速測試
     def quick_reply(self, text: str) -> str:
         return asyncio.run(self.reply(text))["reply"]
+
+
+from utils.background_cleaner import periodic_cleanup
+import threading
+
+class ToneEngine:
+    def __init__(self):
+        self.current_tone = "default"
+        self.previous_tone = "default"
+        self.core_tone = "calm"
+        self.personality_state = {"core_tone": "calm"}
+        self.history = deque(maxlen=30)
+        self._save_task = None
+
+        # ✅ 啟動背景清理執行緒
+        threading.Thread(
+            target=periodic_cleanup,
+            args=(3,),   # 每 3 小時執行一次
+            daemon=True
+        ).start()
+        print("🧹 背景清理器啟動完成（每3小時運行一次）")
+
