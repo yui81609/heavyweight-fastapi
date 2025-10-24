@@ -28,9 +28,12 @@ app = FastAPI(
     servers=[{"url": "https://heavyweight-fastapi-production-b71c.up.railway.app"}],
 )
 
+from utils.memory.memory_manager import init_memory_system
+
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 伺服器啟動，檢查暫存上傳中...")
+    print("🚀 伺服器啟動中...")
+    init_memory_system()  # 🧠 初始化記憶 + 長期同步
     await asyncio.to_thread(retry_upload)
     await asyncio.to_thread(schedule_retry_upload, 600)
 
