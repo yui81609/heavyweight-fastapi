@@ -1,22 +1,25 @@
 # app/main.py
 from utils.uploader import safe_upload, retry_upload
 from typing import List, Optional
-import os
-
+import os, asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 from sqlalchemy import create_engine, MetaData, Table, Column, String, select
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 
-# -------------------- FastAPI & CORS --------------------
+# ---------------- FastAPI & CORS ----------------
 app = FastAPI(
     title="Heavyweight FastAPI",
     version="1.0.0",
     servers=[{"url": "https://heavyweight-fastapi-production-b71c.up.railway.app"}]
 )
+
+@app.on_event("startup")
+async def startup_event():
+    print("🚀 伺服器啟動，檢查暫存上傳中...")
+    await asyncio.to_thread(retry_upload)  # 使用非同步執行，避免阻塞主線程
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,7 +27,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # -------------------- Pydantic Models --------------------
 class Message(BaseModel):
     role: str
