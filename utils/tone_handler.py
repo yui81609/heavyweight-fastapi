@@ -47,4 +47,24 @@ def auto_soft_response(text: str):
 
     tone_delay(tone)
 
-    return f"{text}（語氣：{tone}｜上一輪：{previous_tone}）"
+    from utils.personality import update_personality
+
+def auto_soft_response(text: str):
+    tone = detect_tone(text)
+    previous_tone = load_tone_state()
+
+    if tone == previous_tone:
+        tone = transition_tone(tone)
+    else:
+        save_tone_state(tone)
+
+    # 🧠 更新人格平衡狀態
+    personality_state = update_personality(tone)
+    core_tone = personality_state["core_tone"]
+
+    # 模擬延遲
+    tone_delay(core_tone)
+
+    # ✅ 最終整合輸出
+    return f"{text}（語氣：{tone}｜上一輪：{previous_tone}｜人格基調：{core_tone}）"
+
