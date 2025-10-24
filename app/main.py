@@ -1,5 +1,5 @@
 # app/main.py
-from utils.uploader import safe_upload, retry_upload
+from utils.uploader import safe_upload, retry_upload, schedule_retry_upload
 from typing import List, Optional
 import os, asyncio
 from fastapi import FastAPI
@@ -18,7 +18,8 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     print("🚀 伺服器啟動，檢查暫存上傳中...")
-    await asyncio.to_thread(retry_upload)  # 使用非同步執行，避免阻塞主線程
+    await asyncio.to_thread(retry_upload)  # 啟動時立即補傳
+    await asyncio.to_thread(schedule_retry_upload, 600)  # 每 10 分鐘檢查一次
 
 app.add_middleware(
     CORSMiddleware,
@@ -249,4 +250,46 @@ def import_memories(project_id: str, payload: MemoryImportIn):
                 )
             )
     return {"ok": True, "imported": len(items)}
+
+from fastapi.responses import JSONResponse
+
+@app.post("/force-retry")
+async def force_retry():
+    """
+    手動觸發重試上傳（例如前端或 Postman 呼叫）
+    """
+    await asyncio.to_thread(retry_upload)
+    return JSONResponse({"message": "已手動執行 retry_upload()"})
+import json
+import os
+from fastapi.responses import JSONResponse
+
+BUFFER_FILE = "buffer/pending.jsonl"
+
+@app.get("/pending")
+async def get_pending():
+    """
+    查詢目前暫存中、尚未上傳的資料
+    """
+    if not os.path.exists(BUFFER_FILE):
+        return JSONResponse({"pending": [], "message": "沒有暫存檔案"}, status_code=200)
+    
+    with open(BUFFER_FILE, "r", encoding="utf-8") as f:
+        lines = [json.loads(line) for line in f if line.strip()]
+    
+    if not lines:
+        return JSONResponse({"pending": [], "message": "暫存為空"}, status_code=200)
+    
+    # 只顯示內容的前幾個字，避免太長
+    preview = [
+        {
+            "url": item.get("url", ""),
+            "content": item.get("payload", {}).get("content", "")[:50],
+            "tags": item.get("payload", {}).get("tags", [])
+        }
+        for item in lines
+    ]
+    
+    return JSONResponse({"pending": preview, "count": len(preview)}, status_code=200)
+
 
