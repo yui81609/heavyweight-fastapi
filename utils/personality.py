@@ -5,24 +5,25 @@ from collections import deque, Counter
 from functools import lru_cache
 import asyncio
 
-# ✅ 正確導入（相對路徑）
+# ✅ 正確導入記憶模組
 from utils.memory.memory_manager import add_message, save_memory_async
 
 STATE_FILE = "buffer/personality_state.json"
 
-# 🧠 短期語氣記錄（deque 會自動丟掉最舊的）
+# 🧠 短期語氣記錄
 tone_history = deque(maxlen=10)
 
-# 初始人格狀態
+# 🌿 初始理解模型狀態
 default_personality = {
-    "core_tone": "calm",
-    "stability": 0.7,  # 越高代表越難被短期情緒改變
+    "empathy": 0.7,       # 同理心強度（理解、傾聽）
+    "familiarity": 0.5,   # 熟悉度（語氣自然、親切）
+    "last_emotion": "neutral",
 }
 
 
 @lru_cache(maxsize=5)
 def load_personality():
-    """快取當前人格狀態，避免重複讀檔"""
+    """快取目前理解模型狀態"""
     if not os.path.exists(STATE_FILE):
         return default_personality
     try:
@@ -33,58 +34,70 @@ def load_personality():
 
 
 def save_personality(state: dict):
-    """儲存人格狀態並清除快取"""
+    """儲存理解模型狀態"""
     os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
     load_personality.cache_clear()
-    print(f"💾 已更新人格基調：{state['core_tone']}（穩定度：{state['stability']:.2f}）")
+    print(f"💾 [理解模型] empathy={state['empathy']:.2f}, familiarity={state['familiarity']:.2f}")
 
 
-async def update_personality(tone: str) -> dict:
+async def update_understanding(tone: str) -> dict:
     """
-    根據語氣 tone 微調人格狀態。
-    - 若語氣連續偏一種方向，會影響 core_tone
-    - 穩定度決定人格變化幅度（越高越穩）
+    根據語氣 tone 更新理解模型（同理心與熟悉度）。
+    tone 範例：positive, sad, angry, curious, neutral
     """
     state = load_personality()
     tone_history.append(tone)
 
-    # 統計最近語氣
-    tone_count = Counter(tone_history)
-    dominant_tone = tone_count.most_common(1)[0][0] if tone_count else "calm"
-
-    # 🌤 根據主要情緒修正人格
-    new_tone = state["core_tone"]
-    if dominant_tone in ["sad", "gentle", "warm"] and state["stability"] < 0.9:
-        new_tone = "warm"
-    elif dominant_tone in ["reflective", "rational", "neutral"]:
-        new_tone = "calm"
-    elif dominant_tone in ["angry", "stressed"]:
-        new_tone = "grounded"
-
-    # 穩定度微幅變動
-    if dominant_tone == state["core_tone"]:
-        state["stability"] = min(1.0, state["stability"] + 0.02)
+    # --- 🌤 調整規則 ---
+    if tone in ["sad", "angry"]:
+        # 使用者情緒低落或憤怒 → 同理心上升
+        state["empathy"] = min(1.0, state["empathy"] + 0.05)
+    elif tone in ["positive", "curious"]:
+        # 輕鬆、好奇 → 熟悉度上升
+        state["familiarity"] = min(1.0, state["familiarity"] + 0.03)
     else:
-        state["stability"] = max(0.5, state["stability"] - 0.05)
+        # 情緒平靜 → 慢慢回到基準
+        state["empathy"] = max(0.6, state["empathy"] - 0.01)
+        state["familiarity"] = max(0.4, state["familiarity"] - 0.01)
 
-    # 人格轉換
-    if new_tone != state["core_tone"]:
-        print(f"🧭 人格轉換：{state['core_tone']} → {new_tone}")
-        state["core_tone"] = new_tone
+    # --- 🌈 最近趨勢修正 ---
+    if len(tone_history) >= 5:
+        freq = Counter(tone_history)
+        if freq.get("sad", 0) >= 3:
+            state["empathy"] = min(1.0, state["empathy"] + 0.05)
+        if freq.get("positive", 0) >= 3:
+            state["familiarity"] = min(1.0, state["familiarity"] + 0.05)
 
-    # 儲存更新
+    # 記錄最新情緒
+    state["last_emotion"] = tone
+
+    # --- 💾 儲存 + 寫入短期記憶 ---
     save_personality(state)
-
-    # 💬 將語氣更新寫入短期記憶（非同步，避免阻塞）
-    add_message("assistant", f"Tone update: {tone}")
+    add_message("assistant", f"Emotion detected: {tone}")
     await save_memory_async()
 
     return state
 
 
-    
-    save_memory()
-    return state
+def describe_personality() -> str:
+    """將目前理解狀態轉成自然描述"""
+    s = load_personality()
+    if s["empathy"] > 0.8:
+        tone = "非常理解你的心情"
+    elif s["empathy"] > 0.6:
+        tone = "靜靜地聽你說話"
+    else:
+        tone = "保持溫柔的距離"
+
+    if s["familiarity"] > 0.7:
+        closeness = "語氣自然、像老朋友一樣"
+    elif s["familiarity"] > 0.5:
+        closeness = "語氣親切"
+    else:
+        closeness = "語氣略顯陌生，但真誠傾聽"
+
+    return f"{tone}，{closeness}。"
+
 
