@@ -30,17 +30,21 @@ def soft_response(text: str, tone: str = "default"):
     return f"{text}"
 
 from utils.tone_detector import detect_tone
-from utils.tone_memory import save_tone_state, load_tone_state
+from utils.tone_memory import save_tone_state, load_tone_state, transition_tone
 
 def auto_soft_response(text: str):
-   """
-    自動判斷語氣 + 模擬延遲回應（會記憶上次情緒）
+      """
+    自動判斷語氣 + 模擬延遲回應（會記憶上次情緒並逐步轉換）
     """
     tone = detect_tone(text)
     previous_tone = load_tone_state()
-    save_tone_state(tone)
+    
+    # 如果當前 tone 跟上一輪相同，則啟動情緒漸變
+    if tone == previous_tone:
+        tone = transition_tone(tone)
+    else:
+        save_tone_state(tone)
 
-    # 模擬延遲
     tone_delay(tone)
 
     return f"{text}（語氣：{tone}｜上一輪：{previous_tone}）"
