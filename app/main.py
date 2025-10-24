@@ -260,8 +260,10 @@ async def force_retry():
     """
     await asyncio.to_thread(retry_upload)
     return JSONResponse({"message": "已手動執行 retry_upload()"})
+
 import json
 import os
+
 from fastapi.responses import JSONResponse
 
 BUFFER_FILE = "buffer/pending.jsonl"
@@ -292,4 +294,13 @@ async def get_pending():
     
     return JSONResponse({"pending": preview, "count": len(preview)}, status_code=200)
 
+from utils.tone_handler import auto_soft_response
+
+@app.post("/auto-reply")
+async def auto_reply(user_input: str):
+    """
+    自動偵測語氣並模擬回應延遲
+    """
+    reply = await asyncio.to_thread(auto_soft_response, user_input)
+    return {"reply": reply}
 
