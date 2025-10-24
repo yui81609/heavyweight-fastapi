@@ -1,6 +1,7 @@
 # utils/personality.py
 import json
 import os
+from app.utils.memory.memory_manager import add_message, save_memory
 from collections import deque, Counter
 from functools import lru_cache
 
@@ -71,5 +72,15 @@ def update_personality(tone: str) -> dict:
         state["core_tone"] = new_tone
 
     save_personality(state)
+   
+    # 💡 把記憶整合放這裡（在 return 前）
+    from app.utils.memory.memory_manager import add_message, save_memory
+
+    add_message("assistant", f"Tone update: {tone}")
+
+    # 每 10 次 tone 更新就保存一次摘要
+    if len(tone_history) >= 10:
+    
+    save_memory()
     return state
 
