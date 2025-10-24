@@ -290,6 +290,10 @@ async def auto_reply(user_input: str):
     response = await engine_tone.reply(user_input)
     return {"reply": response["reply"]}
 
+
+# -----------------------------------------------------
+# 💓 Health Check + 智慧保活機制
+# -----------------------------------------------------
 @app.get("/ping")
 def ping():
     """
@@ -298,29 +302,67 @@ def ping():
     return {"status": "alive", "message": "🩵 still running..."}
 
 
+# ========== 智慧保活區段 ==========
 import threading
 import time
 import requests
+from datetime import datetime
 
-def keep_alive():
+last_activity = datetime.utcnow()  # 最近一次 API 呼叫時間
+
+
+@app.middleware("http")
+async def update_last_activity(request, call_next):
     """
-    每 1 分鐘自動 ping 自己一次，防止 Railway 進入睡眠。
+    每次有請求（例如 /auto-reply、/memories）時，
+    自動更新最近互動時間。
+    """
+    global last_activity
+    response = await call_next(request)
+    last_activity = datetime.utcnow()
+    return response
+
+
+def smart_keep_alive():
+    """
+    智慧保活機制：
+    - 根據閒置時間調整 ping 間隔
+    - 節省資源但仍保持活躍狀態
     """
     url = "https://heavyweight-fastapi-production-b71c.up.railway.app/ping"
+    print("💡 Smart Keep-Alive 已啟動")
+
     while True:
         try:
-            r = requests.get(url)
+            now = datetime.utcnow()
+            idle_seconds = (now - last_activity).total_seconds()
+
+            # 🕰 根據閒置時間動態調整頻率
+            if idle_seconds < 300:        # 5 分鐘內有互動
+                interval = 60             # 每 1 分鐘 ping 一次
+            elif idle_seconds < 1800:     # 5~30 分鐘沒互動
+                interval = 180            # 每 3 分鐘 ping 一次
+            else:
+                interval = 600            # 超過 30 分鐘 → 每 10 分鐘一次
+
+            r = requests.get(url, timeout=10)
             if r.status_code == 200:
-                print("💤 [保活] 成功 Ping 自己！")
+                print(f"💤 [保活] 成功（間隔 {interval}s）")
             else:
                 print(f"⚠️ [保活] Ping 回傳非 200：{r.status_code}")
+
         except Exception as e:
             print("⚠️ [保活] 連線失敗：", e)
-        time.sleep(60)  # 每 60 秒（1 分鐘）ping 一次
+
+        time.sleep(interval)
+
 
 @app.on_event("startup")
-def start_keep_alive():
-    threading.Thread(target=keep_alive, daemon=True).start()
+def start_smart_keep_alive():
+    """
+    啟動背景智慧保活線程。
+    """
+    threading.Thread(target=smart_keep_alive, daemon=True).start()
 
 
 
