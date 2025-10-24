@@ -304,3 +304,13 @@ async def auto_reply(user_input: str):
     reply = await asyncio.to_thread(auto_soft_response, user_input)
     return {"reply": reply}
 
+from utils.tone_handler import auto_soft_response
+
+@app.post("/auto-reply")
+async def auto_reply(user_input: str):
+    """
+    自動偵測語氣並模擬回應延遲
+    """
+    reply = await asyncio.to_thread(auto_soft_response, user_input)
+    return {"reply": reply}
+
