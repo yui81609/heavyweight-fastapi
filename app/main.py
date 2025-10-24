@@ -290,4 +290,11 @@ async def auto_reply(user_input: str):
     response = await engine_tone.reply(user_input)
     return {"reply": response["reply"]}
 
+@app.get("/ping")
+def ping():
+    """
+    保活端點：讓伺服器確認自己還在運作中
+    """
+    return {"status": "alive", "message": "🩵 still running..."}
+
 
