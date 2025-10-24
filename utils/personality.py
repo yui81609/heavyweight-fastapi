@@ -1,9 +1,11 @@
 # utils/personality.py
 import json
 import os
-from app.utils.memory.memory_manager import add_message, save_memory
 from collections import deque, Counter
 from functools import lru_cache
+
+# ✅ 記憶系統（只需在這裡匯入一次）
+from app.utils.memory.memory_manager import add_message, save_memory
 
 STATE_FILE = "buffer/personality_state.json"
 
@@ -71,15 +73,19 @@ def update_personality(tone: str) -> dict:
         print(f"🧭 人格轉換：{state['core_tone']} → {new_tone}")
         state["core_tone"] = new_tone
 
+    # 儲存目前人格狀態
     save_personality(state)
-   
-    # 💡 把記憶整合放這裡（在 return 前）
-    from app.utils.memory.memory_manager import add_message, save_memory
 
+    # 💡 將語氣狀態寫入短期記憶（放在 return 前）
     add_message("assistant", f"Tone update: {tone}")
 
     # 每 10 次 tone 更新就保存一次摘要
     if len(tone_history) >= 10:
+        save_memory()
+
+    # ✅ 最後回傳當前人格狀態
+    return state
+
     
     save_memory()
     return state
