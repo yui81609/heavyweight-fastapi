@@ -152,6 +152,11 @@ class MemoryImportIn(BaseModel):
 def health():
     return {"ok": True, "app": "chat-context"}
 
+@app.get("/ping")
+def ping():
+    """保活端點：讓伺服器確認自己還在運作中"""
+    return {"status": "alive", "message": "🩵 still running..."}
+    
 # -----------------------------------------------------
 # 🧠 Tone Engine 高性能人格回覆
 # -----------------------------------------------------
