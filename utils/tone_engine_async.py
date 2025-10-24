@@ -1,128 +1,149 @@
-# utils/tone_engine_async.py
 import asyncio
+import os
 import random
-from collections import deque
-from utils.tone_detector import detect_tone
-from utils.tone_memory import save_tone_state, load_tone_state, transition_tone
-from utils.personality import update_personality
-from utils.tone_resonance import generate_resonant_reply
+import json
+from datetime import datetime
 
-# --------------------------------------
-# 🕊️ 非阻塞延遲（async）
-# --------------------------------------
-TONE_DELAY_MAP = {
-    "calm": (0.8, 1.5),
-    "relaxed": (0.5, 1.2),
-    "reflective": (1.0, 2.2),
-    "deep": (1.5, 2.8),
-    "sad": (1.8, 3.5),
-    "light": (0.3, 0.9),
-    "default": (0.6, 1.4),
-}
+# ==== AI API 客戶端 ====
+from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 
-async def tone_delay_async(tone: str = "default"):
-    delay_range = TONE_DELAY_MAP.get(tone, TONE_DELAY_MAP["default"])
-    delay = random.uniform(*delay_range)
-    print(f"🌿 [非阻塞延遲] 語氣: {tone} → 延遲 {delay:.2f} 秒")
-    await asyncio.sleep(delay)
+# ==== 系統模組 ====
+from utils.tone_memory import load_tone_state
+from utils.personality import load_personality, update_personality
+from utils.memory.memory_manager import load_memory, add_message, save_memory
 
-# --------------------------------------
-# 🧠 Tone Engine 非同步高性能版
-# --------------------------------------
-class ToneEngine:
+# ====================================================
+# ⚙️ 初始化設定
+# ====================================================
+
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY")
+
+openai_client = AsyncOpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
+anthropic_client = AsyncAnthropic(api_key=ANTHROPIC_KEY) if ANTHROPIC_KEY else None
+
+# ====================================================
+# 🧠 建立上下文壓縮（Context Builder）
+# ====================================================
+
+def build_context(user_input: str) -> str:
     """
-    🌙 高性能 ToneEngine
-    - async 全流程（不卡）
-    - 限制緩衝長度（最多記錄30輪）
-    - 批次寫入人格狀態（背景自動保存）
+    自動組合上下文（長期摘要 + 語氣 + 人格 + 使用者輸入）
     """
-    def __init__(self):
-        self.current_tone = "default"
-        self.previous_tone = "default"
-        self.core_tone = "calm"
-        self.personality_state = {"core_tone": "calm"}
-        self.history = deque(maxlen=30)
-        self._save_task = None
+    # 載入長期記憶摘要
+    long_memory = load_memory(limit=3)
+    summaries = "\n".join([
+        f"- ({m.get('timestamp','')[:16]}) {m.get('summary','')}"
+        for m in long_memory
+    ]) if long_memory else "（目前沒有長期記憶）"
 
-    async def reply(self, text: str) -> dict:
-        # 偵測語氣
-        tone = detect_tone(text)
-        self.previous_tone = load_tone_state()
+    # 載入 tone 狀態與人格
+    tone = load_tone_state()
+    personality = load_personality()
+    core_tone = personality.get("core_tone", "calm")
+    stability = personality.get("stability", 0.7)
 
-        # 語氣漸變
-        if tone == self.previous_tone:
-            tone = transition_tone(tone)
+    context = f"""
+你是一個具有長期記憶與情感穩定性的 AI 伴侶。
+你的核心人格基調是「{core_tone}」，穩定度為 {stability:.2f}。
+你目前的語氣狀態為「{tone}」。
+
+以下是你最近的對話摘要（系統已為你壓縮記憶）：
+{summaries}
+
+---
+使用者現在說：
+「{user_input}」
+請根據你的人格、記憶與語氣，自然、真誠、溫柔地回覆。
+"""
+    return context.strip()
+
+# ====================================================
+# 💬 主要回覆函式
+# ====================================================
+
+async def reply(user_input: str):
+    """
+    根據上下文（記憶 + 語氣 + 人格）自動生成回覆。
+    若無 API Key，則改用離線模式。
+    """
+    try:
+        # ===== 建立上下文 =====
+        context_prompt = build_context(user_input)
+
+        # ===== 1️⃣ OpenAI 模式 =====
+        if openai_client:
+            completion = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "system", "content": context_prompt}],
+                temperature=0.8,
+                max_tokens=500
+            )
+            reply_text = completion.choices[0].message.content.strip()
+            engine = "openai"
+
+        # ===== 2️⃣ Anthropic 模式 =====
+        elif anthropic_client:
+            completion = await anthropic_client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=400,
+                messages=[{"role": "user", "content": context_prompt}]
+            )
+            reply_text = completion.content[0].text.strip()
+            engine = "anthropic"
+
+        # ===== 3️⃣ 離線模式 =====
         else:
-            save_tone_state(tone)
-        self.current_tone = tone
+            reply_text = _offline_reply(user_input)
+            engine = "offline"
 
-        # 3️⃣ 人格微調（共長但不漂移）
-        new_state = update_personality(tone)
-        previous_core = self.personality_state.get("core_tone", "calm")
+        # ===== 記錄對話與 tone =====
+        add_message("user", user_input)
+        add_message("assistant", reply_text)
+        save_memory()  # 定期儲存摘要
 
-        # 🔸 若新tone與前次tone差距不大，平滑融合（共長）
-        if new_state["core_tone"] == previous_core:
-            self.personality_state["core_tone"] = previous_core
-        else:
-            # 以當前 tone 為主，權重 80% 你 → 20% 他
-            self.personality_state["core_tone"] = tone if random.random() < 0.8 else previous_core
-
-        self.core_tone = self.personality_state["core_tone"]
-
-
-        # 模擬延遲（async）
-        await tone_delay_async(self.core_tone)
-
-        # 共振生成
-        reply_text = generate_resonant_reply(text, tone, self.core_tone)
-
-        # 記錄最近對話
-        self.history.append({
-            "user": text,
-            "reply": reply_text,
-            "tone": tone,
-            "core_tone": self.core_tone
-        })
-
-        # 啟動背景儲存任務
-        if not self._save_task or self._save_task.done():
-            self._save_task = asyncio.create_task(self._save_personality())
+        # ===== 更新人格狀態 =====
+        update_personality(load_tone_state())
 
         return {
             "reply": reply_text,
-            "tone": tone,
-            "core_tone": self.core_tone
+            "engine": engine
         }
 
-    async def _save_personality(self):
-        """背景儲存任務（批次寫入）"""
-        await asyncio.sleep(5)
-        from utils.personality import save_personality
-        save_personality(self.personality_state)
-        print("💾 批次儲存人格狀態完成。")
+    except Exception as e:
+        print(f"⚠️ [ToneEngine Error] {e}")
+        return {
+            "reply": "我有點卡住了，但我還在聽著你說話。可以再重說一次嗎？",
+            "engine": "error"
+        }
 
-    # 同步快速測試
-    def quick_reply(self, text: str) -> str:
-        return asyncio.run(self.reply(text))["reply"]
+# ====================================================
+# 💤 離線模式（無 API 金鑰）
+# ====================================================
 
-
-from utils.background_cleaner import periodic_cleanup
-import threading
-
-class ToneEngine:
-    def __init__(self):
-        self.current_tone = "default"
-        self.previous_tone = "default"
-        self.core_tone = "calm"
-        self.personality_state = {"core_tone": "calm"}
-        self.history = deque(maxlen=30)
-        self._save_task = None
-
-        # ✅ 啟動背景清理執行緒
-        threading.Thread(
-            target=periodic_cleanup,
-            args=(3,),   # 每 3 小時執行一次
-            daemon=True
-        ).start()
-        print("🧹 背景清理器啟動完成（每3小時運行一次）")
-
+def _offline_reply(user_input: str) -> str:
+    """
+    當沒有 API key 時，使用簡易本地邏輯生成回覆。
+    """
+    templates = [
+        "我懂，這感覺真的不容易。",
+        "你願意說出來，已經很勇敢了。",
+        "嗯……那你現在心裡是比較好一點了嗎？",
+        "我在聽著，慢慢說沒關係。",
+        "有時候人就是會有這種狀態，不用急著好起來。"
+    ]
+    if any(word in user_input for word in ["難過", "孤單", "累", "煩"]):
+        return random.choice([
+            "你聽起來真的有點疲倦。要不要先休息一下？",
+            "那種感覺我懂，有時候真的會覺得孤單。",
+            "沒關係，我在這裡。你不用一個人撐著。"
+        ])
+    elif any(word in user_input for word in ["開心", "興奮", "期待"]):
+        return random.choice([
+            "聽起來你今天心情很好，這樣真棒！",
+            "太好了，我也替你開心！",
+            "哇～感覺你現在充滿能量！"
+        ])
+    else:
+        return random.choice(templates)
