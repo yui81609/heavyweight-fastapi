@@ -17,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 
 from utils.uploader import safe_upload, retry_upload, schedule_retry_upload
-from utils.tone_engine_async import ToneEngine
+from utils.tone_engine_async import reply as generate_ai_reply
 
 # -----------------------------------------------------
 # 🚀 FastAPI 初始化
