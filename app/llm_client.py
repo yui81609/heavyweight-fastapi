@@ -41,7 +41,7 @@ Your job:
 """
 
     resp = client.chat.completions.create(
-        model="firend",
+        model="gpt-5",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": full_user_prompt},
