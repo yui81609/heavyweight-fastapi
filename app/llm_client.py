@@ -1,9 +1,11 @@
-# app/llm_client.py
 from typing import List
+from dotenv import load_dotenv
 from openai import OpenAI
 from app.config import SYSTEM_PROMPT
 
-client = OpenAI()  # 會讀環境變數 OPENAI_API_KEY
+load_dotenv()
+client = OpenAI()
+ # 會讀環境變數 OPENAI_API_KEY
 
 
 def generate_reply(
