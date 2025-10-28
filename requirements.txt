@@ -1,12 +1,12 @@
 fastapi>=0.115,<0.116
 uvicorn[standard]>=0.29,<0.31
 pydantic>=2.7,<3
-sqlalchemy>=2.0,<3
-psycopg[binary]>=3.1,<4
-vaderSentiment==3.3.2
-psutil
-openai>=1.40.0
-anthropic>=0.25.0
+
+openai>=1.40,<2
 requests>=2.31.0
+
+python-dotenv>=1.0,<2
+aiofiles>=24.1,<25
+
 
 
