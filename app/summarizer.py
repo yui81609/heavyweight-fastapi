@@ -31,7 +31,7 @@ def summarize_block(raw_block: List[dict]) -> Tuple[str, List[str]]:
         convo_text += f"USER: {turn['user']}\nASSISTANT: {turn['assistant']}\n"
 
     resp = client.chat.completions.create(
-        model="YOUR_MODEL_NAME",
+        model="friend",
         messages=[
             {"role": "system", "content": SUMMARY_PROMPT},
             {"role": "user", "content": convo_text},
