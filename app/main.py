@@ -1,5 +1,6 @@
 # app/main.py
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.schemas import AutoReplyRequest, AutoReplyResponse, SaveIdentityRequest
 from app.memory import (
     load_relevant_identity_snippets,
@@ -25,11 +26,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/ping")
+def ping():
+    return {"ok": True, "msg": "pong"}
 
 @app.get("/health")
 def health():
     return {"ok": True}
-
 
 @app.post("/save-identity")
 def save_identity(req: SaveIdentityRequest):
